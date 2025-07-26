@@ -16,8 +16,6 @@ export default function CameraInterface({ onPhotoCapture, onShowQR }: CameraInte
   const [isCapturing, setIsCapturing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<string[]>([])
-
   useEffect(() => {
     startCamera()
     return () => {
@@ -27,30 +25,17 @@ export default function CameraInterface({ onPhotoCapture, onShowQR }: CameraInte
     }
   }, [])
 
-  const addDebug = (message: string) => {
-    console.log(`[Camera Debug] ${message}`)
-    setDebugInfo(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
-  }
-
   const startCamera = async () => {
     try {
       setIsLoading(true)
       setError(null)
-      setDebugInfo([])
-      
-      addDebug('Starting camera initialization...')
       
       // First check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        addDebug('getUserMedia not supported')
         setError('Camera access is not supported in this browser.')
         setIsLoading(false)
         return
       }
-      
-      addDebug('getUserMedia is supported')
-
-      addDebug('Requesting camera permissions...')
       
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
@@ -60,64 +45,41 @@ export default function CameraInterface({ onPhotoCapture, onShowQR }: CameraInte
         }
       })
       
-      addDebug('Camera permissions granted, stream received')
       setStream(mediaStream)
       if (videoRef.current) {
-        addDebug('Setting video srcObject')
         videoRef.current.srcObject = mediaStream
         
         // Set up event listeners
         videoRef.current.onloadedmetadata = () => {
-          addDebug('Video metadata loaded')
           setIsCameraActive(true)
           setIsLoading(false)
         }
         
         videoRef.current.oncanplay = () => {
-          addDebug('Video can play')
           setIsCameraActive(true)
           setIsLoading(false)
         }
         
         videoRef.current.onerror = (e) => {
-          addDebug(`Video error: ${e}`)
           setError('Failed to load camera stream.')
           setIsLoading(false)
         }
         
         // Force play the video
         try {
-          addDebug('Attempting to play video...')
           await videoRef.current.play()
-          addDebug('Video play() called successfully')
         } catch (playError) {
-          addDebug(`Video play() failed: ${playError}`)
           // Don't show error, just continue
         }
-        
-        // Check video state after a short delay
-        setTimeout(() => {
-          if (videoRef.current) {
-            addDebug(`Video readyState: ${videoRef.current.readyState}`)
-            addDebug(`Video paused: ${videoRef.current.paused}`)
-            addDebug(`Video currentTime: ${videoRef.current.currentTime}`)
-            addDebug(`Video videoWidth: ${videoRef.current.videoWidth}`)
-            addDebug(`Video videoHeight: ${videoRef.current.videoHeight}`)
-          }
-        }, 1000)
         
         // Fallback: if video doesn't load within 5 seconds, show error
         setTimeout(() => {
           if (isLoading) {
-            addDebug('Camera timeout - checking video state')
-            
             // Check if video is actually working
             if (videoRef.current && videoRef.current.readyState >= 2) {
-              addDebug('Video is ready, activating camera')
               setIsCameraActive(true)
               setIsLoading(false)
             } else {
-              addDebug('Video not ready, showing error')
               setError('Camera stream failed to load. Please try uploading from gallery instead.')
               setIsLoading(false)
             }
@@ -251,52 +213,22 @@ export default function CameraInterface({ onPhotoCapture, onShowQR }: CameraInte
       <div className="camera-body p-6 max-w-sm w-full">
         {/* Camera Lens */}
         <div className="relative mb-6">
-          <div className="camera-lens w-64 h-64 mx-auto rounded-full flex items-center justify-center overflow-hidden">
-            {isCameraActive ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-            ) : isLoading ? (
-              <div className="text-white text-center">
+          <div className="camera-lens w-64 h-64 mx-auto rounded-full flex items-center justify-center overflow-hidden relative">
+            {/* Always render video element, but hide when not active */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`w-full h-full object-cover ${isCameraActive ? 'block' : 'hidden'}`}
+            />
+            
+            {/* Loading overlay */}
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-center">
                 <div className="w-16 h-16 mx-auto mb-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 <p className="text-sm opacity-70">Starting camera...</p>
                 <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      addDebug('Manual camera activation clicked')
-                      if (stream) {
-                        addDebug('Stream exists, activating camera')
-                        setIsCameraActive(true)
-                        setIsLoading(false)
-                        
-                        // Check video element after state change
-                        setTimeout(() => {
-                          if (videoRef.current) {
-                            addDebug(`Manual activation - Video element exists: ${!!videoRef.current}`)
-                            addDebug(`Manual activation - Video srcObject: ${!!videoRef.current.srcObject}`)
-                            addDebug(`Manual activation - Video readyState: ${videoRef.current.readyState}`)
-                          } else {
-                            addDebug('Manual activation - Video element not found')
-                          }
-                        }, 100)
-                      } else if (videoRef.current && videoRef.current.srcObject) {
-                        addDebug('Video has srcObject, activating camera')
-                        setIsCameraActive(true)
-                        setIsLoading(false)
-                      } else {
-                        addDebug('No stream or srcObject found')
-                        setIsLoading(false)
-                        setError('Camera stream failed to load. Please try uploading from gallery instead.')
-                      }
-                    }}
-                    className="mt-2 text-xs text-white/70 hover:text-white transition-colors"
-                  >
-                    Activate camera manually
-                  </button>
                   <button
                     onClick={() => {
                       setIsLoading(false)
@@ -308,8 +240,11 @@ export default function CameraInterface({ onPhotoCapture, onShowQR }: CameraInte
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="text-white text-center">
+            )}
+            
+            {/* Inactive state overlay */}
+            {!isLoading && !isCameraActive && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-center">
                 <Camera className="w-16 h-16 mx-auto mb-2 opacity-50" />
                 <p className="text-sm opacity-70">Camera not available</p>
               </div>
@@ -366,17 +301,7 @@ export default function CameraInterface({ onPhotoCapture, onShowQR }: CameraInte
         </p>
       </div>
 
-      {/* Debug Info (only show if there are debug messages) */}
-      {debugInfo.length > 0 && (
-        <div className="mt-4 p-4 bg-gray-100 rounded-lg max-w-md">
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">Debug Info:</h4>
-          <div className="text-xs text-gray-600 space-y-1 max-h-32 overflow-y-auto">
-            {debugInfo.map((info, index) => (
-              <div key={index}>{info}</div>
-            ))}
-          </div>
-        </div>
-      )}
+
     </div>
   )
 } 
